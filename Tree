@@ -1,0 +1,40 @@
+dns-seven/
+├─ README.md
+├─ pyproject.toml            # 或 requirements.txt（二選一）
+├─ run_server.py             # 入口：啟動 UDP:8053，呼叫 server_api
+├─ server_api.py             # 對外門面：resolve()、metrics() 等
+├─ config/
+│  ├─ bootstrap_ns.json      # 初始可詢問的根/TLD 名單
+│  └─ settings.py            # 超時、重試、併發上限等參數
+├─ dns_core/
+│  ├─ resolver.py            # 行為中樞：把七DS串成一條查詢流程
+│  ├─ types.py               # 共用型別（QueryKey、RRSet、Result…）
+│  ├─ errors.py              # 統一錯誤（Timeout、LoopDetected…）
+│  └─ ds/                    # ← 七個資料結構的家
+│     ├─ cache_tbl.py        # 【七DS】Hit → Map：世界曾有此答（快查）
+│     ├─ ttl_heap.py         # 【七DS】TTL → Min-Heap：誰最先過期
+│     ├─ lru_dlist.py        # 【七DS】LRU → 雙向串列：誰最久沒被用
+│     ├─ inflight_map.py     # 【七DS】合併 → Map：同題只派一人去問
+│     ├─ timer_heap.py       # 【七DS】期限 → Min-Heap：逾時先處理
+│     ├─ ns_ring.py          # 【七DS】候選 → Ring/List：公平輪替問 NS
+│     └─ visited_set.py      # 【七DS】依存 → Set：走過的不再走（防環）
+├─ net_io/
+│  ├─ udp_server.py          # 收/送 UDP 封包
+│  └─ codec/
+│     ├─ parser.py           # 解析 DNS 封包（query/response）
+│     └─ encoder.py          # 組回 DNS 封包（最小 A/AAAA/NS/CNAME）
+├─ util/
+│  ├─ clock.py               # now() 單一時間來源（可注入、可測試）
+│  └─ logging_conf.py        # 日誌格式/等級統一
+├─ tests/
+│  ├─ test_cache_tbl.py
+│  ├─ test_ttl_heap.py
+│  ├─ test_lru_dlist.py
+│  ├─ test_inflight_map.py
+│  ├─ test_timer_heap.py
+│  ├─ test_ns_ring.py
+│  ├─ test_visited_set.py
+│  └─ test_resolver_flow.py  # 端到端：query→answer（含 CNAME/轉介）
+└─ .github/
+   └─ workflows/
+      └─ ci.yml              # CI：自動跑 pytest + 型別檢查（選配）
