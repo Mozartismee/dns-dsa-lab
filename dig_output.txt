@@ -1,0 +1,19 @@
+
+; <<>> DiG 9.10.6 <<>> @127.0.0.1 -p 8053 example.lab A
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 58653
+;; flags: qr aa rd ra ad; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 0
+
+;; QUESTION SECTION:
+;example.lab.			IN	A
+
+;; ANSWER SECTION:
+example.lab.		60	IN	A	127.0.0.1
+
+;; Query time: 0 msec
+;; SERVER: 127.0.0.1#8053(127.0.0.1)
+;; WHEN: Sat Aug 30 10:58:34 CST 2025
+;; MSG SIZE  rcvd: 45
+
