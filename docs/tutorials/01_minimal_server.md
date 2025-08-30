@@ -1,8 +1,11 @@
+太好了～我把「手寫筆記的精華」（精確用語、四層剝洋蔥、外部/內部骨幹＋極簡線圖）整合進你的原始文件，保持最小示例不變，只加上更精準的資料流與可選重構段落。
+
+---
 
 # 01\_minimal\_server — 最小 DNS 權威伺服器
 
-目標：用最少的程式碼把「本機 UDP:8053 → 回答 `example.lab` 的 A 記錄」跑起來，並看懂每一行在幹嘛。資料流固定為：
-`bytes → parse → policy → DSA(core) → policy → encode → bytes`
+目標：用最少的程式碼把「本機 UDP:8053 → 回答 `example.lab` 的 A 記錄」跑起來，並看懂每一行在幹嘛。
+**資料流固定（精確版）**：`UDP payload → parse(DNSRecord) → policy → DSA(core) → encode(bytes) → sendto`
 
 ---
 
@@ -56,6 +59,16 @@
 
 * 上圖中，哪一格是「核心行為」會成長的地方？為什麼？
 
+### 3.1 四層剝洋蔥（極簡速寫圖｜背口訣用）
+
+```
+Client → recvfrom → handle(parse→policy→DSA→encode) → sendto → Kernel/NIC → Client
+          L2               L1                               L2               L3/L4
+```
+
+> 口訣：**L1 做語意；跨界只經 L2；搬比特交給 L3/L4。**
+> `recvfrom` 是耳朵（框架代呼，拿 UDP payload），`sendto` 是嘴巴（我們呼，把回應 bytes 交 kernel）。
+
 ---
 
 ## 4) 程式碼（逐段解剖）
@@ -99,9 +112,9 @@ if __name__ == "__main__":
     server.serve_forever()
 ```
 
-對應資料流：
+對應資料流（精確化）：
 
-* **parse**：`DNSRecord.parse(data)`
+* **parse**：`DNSRecord.parse(data)`（`data` 是 **UDP payload**）
 * **policy**：檢查 `qname` / `qtype`
 * **DSA(core)**：用 `ZONE` 這個 dict 查表（之後換成七個 DSA 模組）
 * **encode**：`reply.add_answer(...)` → `reply.pack()` → `sock.sendto(...)`
@@ -109,6 +122,28 @@ if __name__ == "__main__":
 **練習題**
 
 * 把上面四個步驟各用 1 行註解寫回你的 `server.py`。
+
+### 4.4（可選）外部/內部分層骨幹（保留原功能，利於擴充/測試）
+
+> **目的**：`handle()` 只搬 bytes；核心邏輯收 bytes 回 bytes，方便測試與未來熱插拔七件套。
+
+```python
+def core_dns(bytes_in: bytes) -> bytes:
+    request = DNSRecord.parse(bytes_in)
+    qname   = str(request.q.qname)
+    qtype   = QTYPE[request.q.qtype]
+    reply   = request.reply()
+    if qname in ZONE and qtype in ("A","ANY"):
+        reply.add_answer(RR(qname, QTYPE.A, rdata=A(ZONE[qname]), ttl=60))
+    return reply.pack()
+
+class DNSHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        data, sock = self.request
+        sock.sendto(core_dns(data), self.client_address)
+```
+
+> **邊界守則**：I/O 不做決策；核心不碰 socket/時鐘。
 
 ---
 
@@ -142,6 +177,7 @@ dig @127.0.0.1 -p 8053 example.lab A | tee dig_output.txt
 * `RR(...)`、`A(...)`：組 A 記錄的答案。
 * `reply.pack()`：封包物件 → bytes。
 * `socketserver.UDPServer`、`BaseRequestHandler.handle()`：I/O 邊界。
+* **`recvfrom`/`sendto`（觀念）**：耳朵/嘴巴；經由 kernel 取回/交付 UDP payload。
 
 **練習題**
 
@@ -223,6 +259,12 @@ git commit -m "run: minimal authoritative server (server.py); capture dig output
 
 ## 12) dnslib × socketserver 互動圖（線段版）
 
+### 12.0 極簡線段（放大一次即可背）
+
+```
+Client → recvfrom → handle(parse→policy→DSA→encode) → sendto → Kernel/NIC → Client
+```
+
 ### 12.1 整體時序（Sequence）
 
 ```
@@ -285,15 +327,13 @@ socketserver.UDPServer
         └─ sock.sendto(out, self.client_address)       # 發回 UDP
 ```
 
-> UDP 下 `self.request` 是 `(data, socket)`；`self.client_address` 是 `(ip, port)`。
-
 ### 12.3 與固定資料路徑對齊
 
 ```
-bytes ──parse──>  request(DNSRecord)
-        policy  : 檢查 qname/qtype
-        DSA(core): 目前用 dict 查表；將來改快取/TTL/Timer/NS 等
-request.reply()  組 RR / add_answer(...)
+UDP payload ──parse──> request(DNSRecord)
+           policy    : 檢查 qname/qtype
+           DSA(core) : 目前用 dict 查表；將來改快取/TTL/Timer/NS 等
+request.reply()      : 組 RR / add_answer(...)
 encode ──pack──> bytes ──sendto──> 客戶端
 ```
 
@@ -341,7 +381,7 @@ encode ──pack──> bytes ──sendto──> 客戶端
 
 ```bash
 git add docs/tutorials/01_minimal_server.md
-git commit -m "docs: add 01_minimal_server with dnslib×socketserver interaction diagrams and exercises"
+git commit -m "docs: refine dataflow (UDP payload→parse→policy→DSA→encode→sendto) and add minimal onion/IO-core split diagrams"
 ```
 
-完成後，你已經有「可運行的最小伺服器 + 清晰的物件/函式互動圖」。接下來只需要把 DSA(core) 那一格換成七個模組，功能與可測性就會自然長起來。
+完成 ✅ 這版把**手寫筆記的精華**全收進來了，但保持 01 的「最小可跑」不變；後續要升級 02/03 只動核心，不動外框。
